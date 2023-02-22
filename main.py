@@ -74,7 +74,12 @@ def fetchScheduled(driver):
     print("[+] Fetching scheduled matches")
     driver.get("https://www.bet365.it/#/IP/SCHEDULE")
     time.sleep(6)
-    driver.execute_script("arguments[0].scrollIntoView();", getElement(driver, '//div[@class="onf-Title "]'))
+    try:
+        driver.execute_script("arguments[0].scrollIntoView();", getElement(driver, '//div[@class="onf-Title "]'))
+    except:
+        traceback.print_exc()
+        print(driver.page_source)
+        print(driver.title)
     time.sleep(1)
     soup = BeautifulSoup(driver.page_source, "html.parser")
     rows = []
