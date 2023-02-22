@@ -144,6 +144,7 @@ def sendkeys(driver, xpath, keys, js=False):
 
 def getChromeDriver(proxy=None):
     options = webdriver.ChromeOptions()
+    options.add_argument("--no-sandbox")
     if debug:
         # print("Connecting existing Chrome for debugging...")
         options.debugger_address = "127.0.0.1:9222"
@@ -154,7 +155,7 @@ def getChromeDriver(proxy=None):
         options.add_argument("--disable-blink-features")
         options.add_argument("--disable-blink-features=AutomationControlled")
         options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--no-sandbox")
+
         if os.name == 'nt':
             options.add_argument('--user-data-dir=C:/Selenium1/ChromeProfile')
         else:
