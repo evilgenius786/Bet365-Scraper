@@ -148,6 +148,7 @@ def sendkeys(driver, xpath, keys, js=False):
 def getChromeDriver(proxy=None):
     options = webdriver.ChromeOptions()
     options.add_argument("--no-sandbox")
+    options.add_argument("--headless=new")
     if debug:
         # print("Connecting existing Chrome for debugging...")
         options.debugger_address = "127.0.0.1:9222"
@@ -168,7 +169,7 @@ def getChromeDriver(proxy=None):
         options.add_argument("--blink-settings=imagesEnabled=false")
     if headless:
         # print("Going headless")
-        options.add_argument("--headless")
+
         options.add_argument("--window-size=1920x1080")
     if maximize:
         # print("Maximizing Chrome ")
