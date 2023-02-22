@@ -67,6 +67,7 @@ def fetchLive(driver):
 
 
 def fetchScheduled(driver):
+    print("[+] Fetching scheduled matches")
     driver.get("https://www.bet365.it/#/IP/SCHEDULE")
     time.sleep(6)
     driver.execute_script("arguments[0].scrollIntoView();", getElement(driver, '//div[@class="onf-Title "]'))
@@ -104,7 +105,9 @@ def fetchScheduled(driver):
 
 def main():
     logo()
+    print("Launching chrome...")
     driver = getChromeDriver()
+    print("Chrome launched")
     if not os.path.isdir("live"):
         os.mkdir("live")
     while True:
