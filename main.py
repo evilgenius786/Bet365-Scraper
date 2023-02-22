@@ -83,8 +83,11 @@ def fetchScheduled(driver):
     time.sleep(1)
     soup = BeautifulSoup(driver.page_source, "html.parser")
     rows = []
-    with open("schedule.txt") as f:
-        schedule = f.read()
+    # with open("schedule.txt") as f:
+    #     schedule = f.read()
+    driver.get('https://www.bet365.it/inplaydiaryapi/schedule?timezone=4&lid=6&zid=0')
+    time.sleep(2)
+    schedule=driver.page_source
     for div in soup.find_all("div", {"class": "ips-EventRow_HasPreMatchLink"}):
         teams = div.find_all("div", {"class": "ips-EventRow_EventName"})
 
