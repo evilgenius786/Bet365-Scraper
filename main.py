@@ -153,6 +153,8 @@ def getChromeDriver(proxy=None):
         options.add_experimental_option('useAutomationExtension', False)
         options.add_argument("--disable-blink-features")
         options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--no-sandbox")
         if os.name == 'nt':
             options.add_argument('--user-data-dir=C:/Selenium1/ChromeProfile')
         else:
