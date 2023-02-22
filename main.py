@@ -30,8 +30,12 @@ def fetchLive(driver):
     for url in live_urls:
         print(f"Fetching live matches from {url}")
         driver.get(url)
-        time.sleep(3)
-        driver.execute_script("arguments[0].scrollIntoView();", getElement(driver, '//div[@class="onf-Title "]'))
+        time.sleep(5)
+        try:
+            driver.execute_script("arguments[0].scrollIntoView();", getElement(driver, '//div[@class="onf-Title "]'))
+        except:
+            print(driver.page_source)
+            print(driver.title)
         time.sleep(1)
         soup = BeautifulSoup(driver.page_source, "html.parser")
         rows = []
