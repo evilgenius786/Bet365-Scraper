@@ -2,3 +2,5 @@ bs4
 beautifulsoup4
 selenium
 webdriver-manager
+pytz
+requests

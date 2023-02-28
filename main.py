@@ -3,7 +3,10 @@ import os
 import time
 import traceback
 from datetime import datetime
+from zipfile import ZipFile
 
+import pytz
+import requests
 from bs4 import BeautifulSoup
 from selenium import webdriver
 
@@ -20,22 +23,30 @@ debug = False
 
 headless = True
 images = False
-maximize = False
+maximize = True
 
 incognito = False
-live_urls = ["https://www.bet365.it/#/IP/B1", "https://www.bet365.it/#/IP/B13", "https://www.bet365.it/#/IP/B16", "https://www.bet365.it/#/IP/B17", "https://www.bet365.it/#/IP/B18", "https://www.bet365.it/#/IP/B78", "https://www.bet365.it/#/IP/B8", "https://www.bet365.it/#/IP/B83", "https://www.bet365.it/#/IP/B91", "https://www.bet365.it/#/IP/B92", "https://www.bet365.it/#/IP/B95"]
+live_urls = ["https://www.bet365.it/#/IP/B1", "https://www.bet365.it/#/IP/B13", "https://www.bet365.it/#/IP/B16",
+             "https://www.bet365.it/#/IP4/B17", "https://www.bet365.it/#/IP/B18", "https://www.bet365.it/#/IP/B78",
+             "https://www.bet365.it/#/IP/B8", "https://www.bet365.it/#/IP/B83", "https://www.bet365.it/#/IP/B91",
+             "https://www.bet365.it/#/IP/B92", "https://www.bet365.it/#/IP/B95"]
 
+
+# live_urls=["https://www.bet365.it/#/IP/B16", "https://www.bet365.it/#/IP/B8", "https://www.bet365.it/#/IP/B83", "https://www.bet365.it/#/IP/B95"]
 
 def fetchLive(driver):
     for url in live_urls:
         print(f"Fetching live matches from {url}")
         driver.get(url)
-        time.sleep(5)
-        try:
-            driver.execute_script("arguments[0].scrollIntoView();", getElement(driver, '//div[@class="onf-Title "]'))
-        except:
-            print(driver.page_source)
-            print(driver.title)
+        time.sleep(1)
+        while True:
+            try:
+                driver.execute_script("arguments[0].scrollIntoView();",driver.find_element(By.XPATH,'//img[@class="fm-FooterModule_Logo "]'))
+                break
+            except:
+                print("Scrolling down...")
+            last_div = driver.find_elements(By.XPATH, '//div[@class="ovm-Competition ovm-Competition-open "]')[-1]
+            driver.execute_script("arguments[0].scrollIntoView();", last_div)
         time.sleep(1)
         soup = BeautifulSoup(driver.page_source, "html.parser")
         rows = []
@@ -66,28 +77,30 @@ def fetchLive(driver):
                 }
                 rows.append(row)
         # print(json.dumps(rows, indent=4))
-        with open(f"./live/{sport_name}.json", 'w') as f:
+        with open(f"./LIVE/{sport_name}.json", 'w') as f:
             json.dump(rows, f, indent=4)
 
 
 def fetchScheduled(driver):
     print("[+] Fetching scheduled matches")
     driver.get("https://www.bet365.it/#/IP/SCHEDULE")
-    time.sleep(6)
-    try:
-        driver.execute_script("arguments[0].scrollIntoView();", getElement(driver, '//div[@class="onf-Title "]'))
-    except:
-        traceback.print_exc()
-        print(driver.page_source)
-        print(driver.title)
+    time.sleep(1)
+    while True:
+        try:
+            driver.execute_script("arguments[0].scrollIntoView();", getElement(driver, '//img[@class="fm-FooterModule_Logo "]'))
+            break
+        except:
+            print("Scrolling down...")
+        last_div = driver.find_elements(By.XPATH, '//div[@class="ovm-Competition ovm-Competition-open "]')[-1]
+        driver.execute_script("arguments[0].scrollIntoView();", last_div)
     time.sleep(1)
     soup = BeautifulSoup(driver.page_source, "html.parser")
     rows = []
     # with open("schedule.txt") as f:
     #     schedule = f.read()
     driver.get('https://www.bet365.it/inplaydiaryapi/schedule?timezone=4&lid=6&zid=0')
-    time.sleep(2)
-    schedule=driver.page_source
+    time.sleep(1)
+    schedule = driver.page_source
     for div in soup.find_all("div", {"class": "ips-EventRow_HasPreMatchLink"}):
         teams = div.find_all("div", {"class": "ips-EventRow_EventName"})
 
@@ -109,23 +122,55 @@ def fetchScheduled(driver):
                 url = f"https://www.bet365.it/#/AC/B{b}/C{c}/D{d}/E{e}/F{f}"
                 row["url"] = url
         rows.append(row)
-    print(json.dumps(rows, indent=4))
+    # print(json.dumps(rows, indent=4))
     print(f"Found {len(rows)} matches")
     with open(f"./scheduled.json", 'w') as f:
         json.dump(rows, f, indent=4)
 
 
+def ZipAndUpload():
+    with ZipFile('bet365.zip', 'w') as zipObj:
+        for folderName, subfolders, filenames in os.walk('LIVE'):
+            for filename in filenames:
+                filePath = os.path.join(folderName, filename)
+                zipObj.write(filePath, filePath)
+        filePath = os.path.join("scheduled.json")
+        zipObj.write(filePath, "PRE MATCH/scheduled.json")
+        zipObj.write("lastupdated.txt", "lastupdated.txt")
+    print("Zip file created successfully!")
+    with open("bet365.zip", mode='rb') as ifile:
+        headers = {'Content-Type': 'application/x-www-form-urlencoded',
+                   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.114 Safari/537.36",
+                   }
+        res = requests.post('https://ilmentore.site/LATE/bet365.php',
+                            headers=headers,
+                            data={"bet365-zip": ifile.read()}
+                            )
+        print(res.content)
+
+
 def main():
     logo()
-    print("Launching chrome...")
-    driver = getChromeDriver()
-    print("Chrome launched")
-    if not os.path.isdir("live"):
-        os.mkdir("live")
+
+    if not os.path.isdir("LIVE"):
+        os.mkdir("LIVE")
+
     while True:
-        fetchScheduled(driver)
-        fetchLive(driver)
-        time.sleep(10)
+        print("starting", datetime.now())
+        print("Launching chrome...")
+        driver = getChromeDriver()
+        print("Chrome launched")
+        try:
+            fetchScheduled(driver)
+            fetchLive(driver)
+            with open("lastupdated.txt", 'w') as lfile:
+                lfile.write(str(datetime.now(pytz.timezone('Europe/Rome'))))
+            # time.sleep(10)
+        except:
+            traceback.print_exc()
+        ZipAndUpload()
+        print("ending", datetime.now())
+        driver.close()
 
 
 def pprint(msg):
@@ -159,8 +204,8 @@ def sendkeys(driver, xpath, keys, js=False):
 
 def getChromeDriver(proxy=None):
     options = webdriver.ChromeOptions()
-    options.add_argument("--no-sandbox")
-    options.add_argument("--headless=new")
+    # options.add_argument("--no-sandbox")
+    # options.add_argument("--headless=new")
     if debug:
         # print("Connecting existing Chrome for debugging...")
         options.debugger_address = "127.0.0.1:9222"
