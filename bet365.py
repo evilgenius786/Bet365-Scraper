@@ -130,8 +130,10 @@ def fetchSchedule(driver):
                 "Data": dd,
                 "Time": line.split("SM=")[1].split(";")[0],
                 "Sport": line.split("CL=")[1].split(";")[0],
-                "Casa": line.split("NA=")[1].split(";")[0],
+                "Casa": line.split("NA=")[1].replace("&amp;", "&").split(";")[0]
             }
+            if row['Sport'] == "Tennis":
+                continue
             if " v " in row["Casa"]:
                 row["Casa"], row["Ospite"] = row["Casa"].split(" v ")
             elif " - " in row["Casa"]:
@@ -275,6 +277,7 @@ def TennisSchedule(data):
             row = {
                 "Casa": line.split(";NA=")[1].split(";")[0],
                 "Ospite": line.split(";N2=")[1].split(";")[0],
+                "Sport": "Tennis",
                 "Date": dt.strftime("%d/%m/%Y"),
                 "Time": dt.strftime("%H:%M"),
                 "Championship": championship
