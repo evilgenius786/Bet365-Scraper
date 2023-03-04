@@ -21,6 +21,7 @@ from selenium.webdriver.chrome.service import Service
 
 wait_time = 10
 # test = True
+
 sports_list = [
     {
         "url": "https://www.bet365.it/#/IP/B16",
@@ -28,6 +29,14 @@ sports_list = [
         "driver": None,
         "match_class": "ovm-FixtureDetailsBaseball_TeamsAndScoresWrapper",
         "team_class": "ovm-FixtureDetailsBaseball_Teams"
+    },
+    {
+
+        "url": "https://www.bet365.it/#/IP/B110",
+        "name": "Pallanuoto",
+        "driver": None,
+        "match_class": "ovm-FixtureDetailsTwoWay_TeamsWrapper",
+        "team_class": "ovm-FixtureDetailsTwoWay_TeamName"
     },
     {
 
@@ -100,7 +109,23 @@ sports_list = [
         "match_class": "ovm-FixtureDetailsTwoWay_TeamsWrapper",
         "team_class": "ovm-FixtureDetailsTwoWay_Team"
     },
-
+]
+schedule_list = [
+    {
+        "Sport": "TENNISTAVOLO",
+        "Links": [
+            "https://www.bet365.it/#/AC/B92/C20694992/D48/E920000/F10/",
+            "https://www.bet365.it/#/AC/B92/C20791634/D48/E920000/F10/"
+        ]
+    },
+    {
+        "Sport": "PALLANUOTO",
+        "Links": [
+            "https://www.bet365.it/#/AC/B110/C20809027/D48/E1100003/F10/",
+            "https://www.bet365.it/#/AC/B110/C20811896/D48/E1100003/F10/",
+            "https://www.bet365.it/#/AC/B110/C20843366/D48/E1100003/F10/"
+        ]
+    }
 ]
 t = 1
 timeout = 10
@@ -114,13 +139,72 @@ maximize = True
 incognito = False
 
 
+def ParseScheduleData(data, sportName):
+    schedule_rows = []
+    if os.path.isfile(f"./SCHEDULE/{sportName}_schedule.json"):
+        with open(f"./SCHEDULE/{sportName}_schedule.json", 'r') as f:
+            schedule_rows = json.loads(f.read())
+    championship = ""
+    for line in data.split("|"):
+        if "MG;ID=" in line:
+            try:
+                championship = line.split(";NA=")[1].split(";")[0]
+                continue
+            except:
+                pass
+        if ";NA=" in line and ";N2=" in line:
+            dt = datetime.strptime(line.split(";BC=")[1].split(";")[0], "%Y%m%d%H%M%S") + timedelta(hours=1)
+            row = {
+                "Casa": line.split(";NA=")[1].split(";")[0],
+                "Ospite": line.split(";N2=")[1].split(";")[0],
+                "Sport": sportName,
+                "Date": dt.strftime("%d/%m/%Y"),
+                "Time": dt.strftime("%H:%M"),
+                "Championship": championship
+            }
+            if ";FS=1;" in line:
+                row["Live"] = "Yes"
+            else:
+                row["Live"] = "No"
+                row["url"] = f"https://www.bet365.it/#" + line.split(";PD=")[1].split(";")[0].replace("#", "/")
+            # print(line)
+            if row not in schedule_rows:
+                print(f"Adding new scheduled row {row}")
+                schedule_rows.append(row)
+    print(len(schedule_rows))
+    with open(f"./SCHEDULE/{sportName}_schedule.json", 'w') as f:
+        f.write(json.dumps(schedule_rows, indent=4))
+
+
+def GetNewSchedule(driver, url, sportName):
+    # url="https://www.bet365.it/#/AC/B110/C20811896/D48/E1100003/F10/"
+    print(f"Fetching {sportName} schedule {url}")
+    driver.get(url)
+    time.sleep(3)
+    logs_raw = driver.get_log("performance")
+    # print(f"Found {len(logs_raw)} logs")
+    logs = [json.loads(lr["message"])["message"] for lr in logs_raw]
+    for log in filter(log_filter, logs):
+        # for log in logs:
+        request_id = log["params"]["requestId"]
+        resp_url = log["params"]["response"]["url"]
+        # print(resp_url)
+        if url.split("/#")[1].replace("/", "%23") in resp_url or "upcomingmatches" in resp_url:
+            print(f"Caught {resp_url}")
+            data = driver.execute_cdp_cmd("Network.getResponseBody", {"requestId": request_id})
+            ParseScheduleData(data["body"], sportName)
+            break
+
+
 def fetchSchedule(driver):
+    with open("schedule_anticipate.json", "r") as f:
+        schedule_anticipate_rows = json.loads(f.read())
+    with open("schedule.json", "r") as f:
+        schedule_rows = json.loads(f.read())
     print("Fetching schedule")
     driver.get("https://www.bet365.it/inplaydiaryapi/schedule?timezone=4&lid=6&zid=0")
     schedule = driver.page_source
     dd = ""
-    schedule_rows = []
-    schedule_anticipate_rows = []
     for line in schedule.split("|"):
         # print(line)
         if line.startswith("CL;IT="):
@@ -147,9 +231,11 @@ def fetchSchedule(driver):
             f = line.split('T2=')[1].split(';')[0]
             url = f"https://www.bet365.it/#/AC/B{b}/C{c}/D{d}/E{e}/F{f}"
             row["url"] = url
-            if row["Data"] == datetime.now().strftime("%d/%m"):
-                schedule_rows.append(row)
-            schedule_anticipate_rows.append(row)
+            if row not in schedule_anticipate_rows:
+                print(f"Adding new scheduled row {row}")
+                if row["Data"] == datetime.now().strftime("%d/%m"):
+                    schedule_rows.append(row)
+                schedule_anticipate_rows.append(row)
     with open("schedule.json", "w") as f:
         f.write(json.dumps(schedule_rows, indent=4))
     print(f"Found {len(schedule_rows)} matches in schedule")
@@ -166,17 +252,17 @@ def fetchLive(sport):
     if driver.current_url != sport["url"]:
         print(f"Wrong url: {driver.current_url}")
         return
-    for i in range(30):
+    for i in range(10):
         if "bl-Preloader_Spinner" in driver.page_source:
             print("Waiting for preloader...")
             time.sleep(1)
         else:
             break
     print(f"Fetching live matches from {driver.current_url}")
-    while True:
+    for i in range(10):
         try:
             driver.execute_script("arguments[0].scrollIntoView();",
-                                  driver.find_element(By.XPATH, '//img[@class="fm-FooterModule_Logo "]'))
+                                  driver.find_element(By.XPATH, '//div[@class="flm-FooterLegacyModule_Wrapper "]'))
             break
         except:
             print("Scrolling down...")
@@ -193,13 +279,22 @@ def fetchLive(sport):
         rerun = False
         soup = BeautifulSoup(driver.page_source, "html.parser")
         for competition in soup.find_all('div', {'class': 'ovm-Competition ovm-Competition-open'}):
-            matches = competition.find_all('div', {'class': sport["match_class"]})
-            if len(matches) == 0:
-                print(
-                    f"Waiting for matches in {competition.find('div', {'class': 'ovm-CompetitionHeader_Name'}).text} {i}")
-                time.sleep(1)
-                rerun = True
-                break
+            if competition.find('div', {'class': 'ovm-Link_Text'}):
+                continue
+            try:
+                matches = competition.find_all('div', {'class': sport["match_class"]})
+                if len(matches) == 0:
+                    print(
+                        f"Waiting for matches in {competition.find('div', {'class': 'ovm-CompetitionHeader_Name'}).text} {i}")
+                    time.sleep(1)
+                    rerun = True
+                    break
+            except:
+                pass
+                # print("Waiting for matches...")
+                # time.sleep(1)
+                # rerun = False
+                # break
         if not rerun:
             break
     rows = []
@@ -207,19 +302,35 @@ def fetchLive(sport):
     competitions = soup.find_all('div', {'class': 'ovm-Competition ovm-Competition-open'})
     print(f"Found {len(competitions)} competitions in {sport_name}")
     for competition in competitions:
-        header = competition.find('div', {'class': 'ovm-CompetitionHeader_Name'}).text
-        matches = competition.find_all('div', {'class': sport["match_class"]})
-        print(f"Found {len(matches)} matches in {header} competition")
-        for match in matches:
-            teams = match.find_all('div', {'class': sport["team_class"]})
-            row = {
-                "header": header,
-                "Tipo": "Live",
-                "Sport ": sport_name,
-                "Casa": teams[0].text,
-                "Ospite": teams[1].text,
-            }
-            rows.append(row)
+        try:
+            if competition.find('div', {'class': 'ovm-Link_Text'}):
+                for comp in competition.find_all('div', {'class': 'ovm-Link_Text'}):
+                    team = comp.text.split(" v ")
+                    row = {
+                        "header": competition.find('div', {'class': 'ovm-CompetitionHeader_Name'}).text,
+                        "Tipo": "Live",
+                        "Sport ": sport_name,
+                        "Casa": team[0],
+                    }
+                    if len(team) > 1:
+                        row["Ospite"] = team[1]
+                    rows.append(row)
+                continue
+            header = competition.find('div', {'class': 'ovm-CompetitionHeader_Name'}).text
+            matches = competition.find_all('div', {'class': sport["match_class"]})
+            print(f"Found {len(matches)} matches in {header} competition")
+            for match in matches:
+                teams = match.find_all('div', {'class': sport["team_class"]})
+                row = {
+                    "header": header,
+                    "Tipo": "Live",
+                    "Sport ": sport_name,
+                    "Casa": teams[0].text,
+                    "Ospite": teams[1].text,
+                }
+                rows.append(row)
+        except:
+            pass
     # print(json.dumps(rows, indent=4))
     with open(f"./LIVE/{sport_name}.json", 'w') as f:
         json.dump(rows, f, indent=4)
@@ -227,10 +338,12 @@ def fetchLive(sport):
 
 
 def main():
-    global sports_list
+    today = datetime.now().strftime("%d-%m-%Y")
     logo()
     if not os.path.isdir("LIVE"):
         os.mkdir("LIVE")
+    if not os.path.isdir("SCHEDULE"):
+        os.mkdir("SCHEDULE")
     scheduled_driver = getChromeDriver(sport="Scheduled")
     for sport in sports_list:
         if sport["driver"] is None:
@@ -240,14 +353,19 @@ def main():
                 sport["driver"] = getChromeDriver(sport=sport["name"])
     while True:
         start = datetime.now()
+        if datetime.now().strftime("%d-%m-%Y") != today:
+            today = datetime.now().strftime("%d-%m-%Y")
+            with open("schedule_anticipate.json", "w") as f:
+                json.dump([], f, indent=4)
+            with open("schedule.json", "w") as f:
+                json.dump([], f, indent=4)
         try:
-            threads = [threading.Thread(target=fetchLive, args=(sport,)) for sport in sports_list]
-            # threads = []
-            threads.append(threading.Thread(target=fetchSchedule, args=(scheduled_driver,)))
-            threads.append(threading.Thread(target=getTennisSchedule, args=(scheduled_driver,)))
-            for t in threads:
-                t.start()
-                t.join()
+            # for sport in sports_list:
+            #     fetchLive(sport)
+            # fetchSchedule(scheduled_driver)
+            for schedule in schedule_list:
+                for url in schedule["Links"]:
+                    GetNewSchedule(scheduled_driver, url, schedule["Sport"])
             pprint("Fetching done, zipping and uploading...")
             while True:
                 try:
@@ -264,55 +382,6 @@ def main():
 
 def log_filter(log_):
     return log_["method"] == "Network.responseReceived"
-
-
-def TennisSchedule(data):
-    rows = []
-    championship = ""
-    for line in data.split("|"):
-        if "MG;ID=" in line:
-            championship = line.split(";NA=")[1].split(";")[0]
-        if ";NA=" in line and ";N2=" in line:
-            dt = datetime.strptime(line.split(";BC=")[1].split(";")[0], "%Y%m%d%H%M%S") + timedelta(hours=1)
-            row = {
-                "Casa": line.split(";NA=")[1].split(";")[0],
-                "Ospite": line.split(";N2=")[1].split(";")[0],
-                "Sport": "Tennis",
-                "Date": dt.strftime("%d/%m/%Y"),
-                "Time": dt.strftime("%H:%M"),
-                "Championship": championship
-            }
-            if ";FS=1;" in line:
-                row["Live"] = "Yes"
-                row["url"] = f"https://www.bet365.it/#/IP/EV" + line.split(";PT=L13")[1].split(";")[0].replace("-",
-                                                                                                               "").replace(
-                    "20000625_6_0", "C13")
-            else:
-                row["Live"] = "No"
-                row["url"] = f"https://www.bet365.it/#" + line.split(";PD=")[1].split(";")[0].replace("#", "/")
-            # print(line)
-            rows.append(row)
-    print(len(rows))
-    with open("tennisBet365scheduled.json", 'w') as f:
-        f.write(json.dumps(rows, indent=4))
-
-
-def getTennisSchedule(driver):
-    print("Fetching tennis schedule...")
-    driver.get('https://www.bet365.it/#/AC/B13/C1/D50/E2/F163/')
-    time.sleep(3)
-    logs_raw = driver.get_log("performance")
-    # print(f"Found {len(logs_raw)} logs")
-    logs = [json.loads(lr["message"])["message"] for lr in logs_raw]
-    for log in filter(log_filter, logs):
-        # for log in logs:
-        request_id = log["params"]["requestId"]
-        resp_url = log["params"]["response"]["url"]
-        if "https://www.bet365.it/SportsBook.API/web?lid=6&zid=0&pd=%23AC%23B13%23C1%23D50%23E2%23F163%23&cid=97&cgid=4&ctid=97" == resp_url:
-            print(f"Caught {resp_url}")
-            data = driver.execute_cdp_cmd("Network.getResponseBody", {"requestId": request_id})
-            TennisSchedule(data["body"])
-            break
 
 
 def logo():
@@ -438,3 +507,4 @@ def getFirefoxDriver():
 
 if __name__ == "__main__":
     main()
+    # GetNewSchedule(getChromeDriver(), 'https://www.bet365.it/#/AC/B1/C1/D1002/G40/J99/I1/Q1/F^12/',"Tennis")
