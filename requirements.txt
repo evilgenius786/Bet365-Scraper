@@ -4,3 +4,6 @@ selenium
 webdriver-manager
 pytz
 requests
+pywinauto
+psutil
+pyperclip
